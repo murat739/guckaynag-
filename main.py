@@ -59,6 +59,20 @@ def render_legal_disclaimer():
 # -----------------------------------------------------------------------------
 # 2. PDF RAPORLAMA VE TÜRKÇE FONT YÖNETİCİSİ
 # -----------------------------------------------------------------------------
+def turkce_karakter_duzelt(metin: str) -> str:
+    """Helvetica fontunun desteklemediği Türkçe karakterleri güvenli karakterlere dönüştürür."""
+    tr_map = {
+        'ç': 'c', 'Ç': 'C',
+        'ğ': 'g', 'Ğ': 'G',
+        'ı': 'i', 'İ': 'I',
+        'ö': 'o', 'Ö': 'O',
+        'ş': 's', 'Ş': 'S',
+        'ü': 'u', 'Ü': 'U'
+    }
+    for tr_karsilik, ing_karsilik in tr_map.items():
+        metin = metin.replace(tr_karsilik, ing_karsilik)
+    return metin
+
 def turkce_font_ayarla():
     """Linux (Streamlit Cloud) ve Windows sistemlerinde Türkçe karakterleri destekleyen fontu ayarlar."""
     font_adaylari = [
@@ -90,6 +104,10 @@ def pdf_raporu_olustur(veri):
     elements = []
 
     secilen_font = turkce_font_ayarla()
+    
+    # Eğer harici font bulunamazsa Helvetica kullanılacağı için Türkçe karakterleri dönüştürüyoruz
+    using_fallback = (secilen_font == "Helvetica")
+
     styles = getSampleStyleSheet()
 
     baslik_style = ParagraphStyle(
@@ -123,11 +141,14 @@ def pdf_raporu_olustur(veri):
         textColor=colors.HexColor("#2D3748"),
     )
 
-    elements.append(Paragraph("KESİNTİSİZ GÜÇ KAYNAĞI (UPS) & AKÜ BOYUTLANDIRMA RAPORU", baslik_style))
-    elements.append(Paragraph("IEC 62040-3 Standartlarına Uygun Teknik Tasarım Belgesi", ParagraphStyle("Sub", parent=normal_style, alignment=1, textColor=colors.gray)))
+    baslik_metin = "KESINTISIZ GUC KAYNAGI (UPS) & AKU BOYUTLANDIRMA RAPORU" if using_fallback else "KESİNTİSİZ GÜÇ KAYNAĞI (UPS) & AKÜ BOYUTLANDIRMA RAPORU"
+    alt_baslik_metin = "IEC 62040-3 Standartlarina Uygun Teknik Tasarim Belgesi" if using_fallback else "IEC 62040-3 Standartlarına Uygun Teknik Tasarım Belgesi"
+
+    elements.append(Paragraph(baslik_metin, baslik_style))
+    elements.append(Paragraph(alt_baslik_metin, ParagraphStyle("Sub", parent=normal_style, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 15))
 
-    tablo_verisi = [
+    ham_tablo_verisi = [
         ["Parametre / Kriter Adı", "Tasarım Değeri / Seçim"],
         ["Toplam Aktif Yük", f"{veri['aktif_guc']} kW"],
         ["Güç Faktörü (Cos φ)", f"{veri['guc_faktoru']}"],
@@ -142,6 +163,14 @@ def pdf_raporu_olustur(veri):
         ["Akü Deşarj / Peukert Çarpanı", f"{veri['deşarj_katsayisi']}"],
         ["Sıcaklık & Yaşlanma Faktörü", f"{veri['sicaklik_yaslanma_toplam']:.2f} Kat"],
     ]
+
+    # Eğer standart Helvetica kullanılıyorsa tablodaki metinleri de dönüştürüyoruz
+    tablo_verisi = []
+    for satir in ham_tablo_verisi:
+        if using_fallback:
+            tablo_verisi.append([turkce_karakter_duzelt(satir[0]), turkce_karakter_duzelt(satir[1])])
+        else:
+            tablo_verisi.append(satir)
 
     t = Table(tablo_verisi, colWidths=[240, 280])
     t.setStyle(
@@ -161,13 +190,18 @@ def pdf_raporu_olustur(veri):
     elements.append(t)
     elements.append(Spacer(1, 15))
 
-    elements.append(Paragraph("Mühendislik Notları ve Sorumluluk Reddi", alt_baslik_style))
+    notlar_baslik = "Muhendislik Notlari ve Sorumluluk Reddi" if using_fallback else "Mühendislik Notları ve Sorumluluk Reddi"
+    elements.append(Paragraph(notlar_baslik, alt_baslik_style))
+    
     aciklama_metni = (
         "1. Bu yazılım yalnızca teknik personele yardımcı olmak maksadıyla geliştirilmiştir. Hesaplanan tüm değerler uygulama öncesinde yetkili uzmanlarca mutlaka kontrol edilmeli ve doğrulanmalıdır.<br/>"
         "2. Çıkan sonuçlara ve değerlere dayanarak yapılacak her türlü tasarım, uygulama ve imalatın sorumluluğu tamamen kullanıcıya aittir; geliştiricinin hiçbir hukuki ve cezai sorumluluğu yoktur.<br/>"
         "3. Bu yazılım kopyalanamaz ve ticari amaçlı kullanılamaz.<br/>"
         "4. Kısa süreli deşarjlarda kapasite kayıpları Peukert ve deşarj matris katsayıları ile rezerve edilmiştir."
     )
+    if using_fallback:
+        aciklama_metni = turkce_karakter_duzelt(aciklama_metni)
+
     elements.append(Paragraph(aciklama_metni, normal_style))
 
     doc.build(elements)
