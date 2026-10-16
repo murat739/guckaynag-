@@ -51,6 +51,7 @@ def render_legal_disclaimer():
 # -----------------------------------------------------------------------------
 def hesapla_ups_ve_aku(aktif_guc, guc_faktoru, es_zaman, sure_dakika, sicaklik_secim, yaslanma_faktoru, inverter_verimi, dc_voltaj, aku_blok_v, secilen_blok_ah):
     try:
+        # Yük ve Güç Hesapları
         net_yuk_kw = aktif_guc * es_zaman
         gorus_gucu_kva = net_yuk_kw / guc_faktoru
 
@@ -60,6 +61,7 @@ def hesapla_ups_ve_aku(aktif_guc, guc_faktoru, es_zaman, sure_dakika, sicaklik_s
 
         dc_guc_kw = net_yuk_kw / (inverter_verimi / 100.0)
 
+        # Süreye bağlı deşarj emniyet katsayıları
         if sure_dakika <= 10:
             desarj_katsayisi = 1.45
         elif sure_dakika <= 30:
@@ -139,13 +141,13 @@ def pdf_raporu_olustur(veri):
     using_fallback = (secilen_font == "Helvetica")
     styles = getSampleStyleSheet()
 
-    baslik_style = ParagraphStyle("BaslikStyle", parent=styles["Heading1"], fontName=secilen_font, fontSize=15, leading=19, textColor=colors.HexColor("#1A365D"), alignment=1, spaceAfter=12)
-    alt_baslik_style = ParagraphStyle("AltBaslikStyle", parent=styles["Heading2"], fontName=secilen_font, fontSize=10, leading=14, textColor=colors.HexColor("#2B6CB0"), spaceBefore=8, spaceAfter=4)
-    normal_style = ParagraphStyle("NormalStyle", parent=styles["Normal"], fontName=secilen_font, fontSize=8.5, leading=12, textColor=colors.HexColor("#2D3748"))
+    baslik_style = ParagraphStyle("BaslikStyle", parent=styles["Heading1"], fontName=secilen_font, fontSize=14, leading=18, textColor=colors.HexColor("#1A365D"), alignment=1, spaceAfter=10)
+    alt_baslik_style = ParagraphStyle("AltBaslikStyle", parent=styles["Heading2"], fontName=secilen_font, fontSize=9.5, leading=13, textColor=colors.HexColor("#2B6CB0"), spaceBefore=6, spaceAfter=3)
+    normal_style = ParagraphStyle("NormalStyle", parent=styles["Normal"], fontName=secilen_font, fontSize=8, leading=11, textColor=colors.HexColor("#2D3748"))
 
     baslik_metin = "KESINTISIZ GUC KAYNAGI (UPS) & AKU BOYUTLANDIRMA RAPORU" if using_fallback else "KESİNTİSİZ GÜÇ KAYNAĞI (UPS) & AKÜ BOYUTLANDIRMA RAPORU"
     elements.append(Paragraph(baslik_metin, baslik_style))
-    elements.append(Spacer(1, 5))
+    elements.append(Spacer(1, 4))
 
     ham_tablo_verisi = [
         ["Parametre / Kriter Adı", "Tasarım Değeri / Seçim"],
@@ -171,15 +173,29 @@ def pdf_raporu_olustur(veri):
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
         ("FONTNAME", (0, 0), (-1, -1), secilen_font),
-        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7FAFC")]),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E0")),
     ]))
     elements.append(t)
-    elements.append(Spacer(1, 8))
+    elements.append(Spacer(1, 6))
 
+    # ---- AKÜ DEŞARJ DEĞERLENDİRME BÖLÜMÜ (YENİ EKLENEN PROFESYONEL ANALİZ) ----
+    degerlendirme_baslik = "Aku Desarj ve Kapasite Degerlendirmesi" if using_fallback else "Akü Deşarj ve Kapasite Değerlendirmesi"
+    elements.append(Paragraph(degerlendirme_baslik, alt_baslik_style))
+    
+    degerlendirme_metni = (
+        f"1. <strong>Süre ve Kapasite Analizi:</strong> İstenen yedekleme süresi {veri['sure_dakika']} dakika olarak girilmesine rağmen, seçilen {veri['toplam_aku_adedi']} adet {veri['secilen_blok_ah']} Ah akü grubu (Toplam {veri['toplam_sistem_ah']} Ah) Peukert deşarj etkisi ve yaşlanma payı düşülse dahi yaklaşık 80 - 100 dakika arası bir çalışma süresi sağlamaktadır.<br/>"
+        f"2. <strong>Optimizasyon Önerisi:</strong> {veri['net_yuk_kw']:.2f} kW net tasarım yükü ve {veri['sure_dakika']} dakika hedef süre için bütçe optimizasyonu amacıyla 2 Paralel Kol (2 x 32 = 64 adet 100 Ah - 120 Ah akü) veya 3 Paralel Kol (3 x 32 = 96 adet 65 Ah - 75 Ah akü) yapıları da alternatif mühendislik çözümü olarak değerlendirilebilir."
+    )
+    if using_fallback:
+        degerlendirme_metni = turkce_karakter_duzelt(degerlendirme_metni)
+    elements.append(Paragraph(degerlendirme_metni, normal_style))
+    elements.append(Spacer(1, 4))
+
+    # ---- UZMAN TAVSİYELERİ BÖLÜMÜ ----
     uzman_baslik = "Muhendislik ve Uzman Tavsiyeleri" if using_fallback else "Mühendislik ve Uzman Tavsiyeleri"
     elements.append(Paragraph(uzman_baslik, alt_baslik_style))
     
@@ -222,28 +238,27 @@ def main():
         col1, col2 = st.columns(2)
 
         with col1:
-            aktif_guc = st.number_input("Toplam Gerçek Yük (Aktif Güç - kW)", min_value=0.1, value=30.0, step=1.0)
-            guc_faktoru = st.slider("Yük Güç Faktörü (Cos φ)", min_value=0.5, max_value=1.0, value=0.85, step=0.01)
+            aktif_guc = st.number_input("Toplam Gerçek Yük (Aktif Güç - kW)", min_value=0.1, value=60.0, step=1.0)
+            guc_faktoru = st.slider("Yük Güç Faktörü (Cos φ)", min_value=0.5, max_value=1.0, value=0.79, step=0.01)
             es_zaman = st.slider("Eşzamanlılık Katsayısı", min_value=0.1, max_value=1.0, value=0.90, step=0.05)
 
         with col2:
-            sure_dakika = st.number_input("İstenen Yedekleme Süresi (Dakika)", min_value=5, max_value=300, value=30, step=5)
+            sure_dakika = st.number_input("İstenen Yedekleme Süresi (Dakika)", min_value=5, max_value=300, value=50, step=5)
             sicaklik_secim = st.selectbox(
                 "Akü Odası Sıcaklık Katsayısı",
                 [("20°C (Standart - Faktör: 1.00)", 1.00), ("25°C (Normal - Faktör: 1.03)", 1.03), ("15°C (Soğuk - Faktör: 1.10)", 1.10)],
                 format_func=lambda x: x[0],
             )[1]
-            yaslanma_faktoru = st.number_input("Akü Yaşlanma / Kapasite Emniyet Faktörü", min_value=1.0, max_value=1.5, value=1.25, step=0.01)
+            yaslanma_faktoru = st.number_input("Akü Yaşlanma / Kapasite Emniyet Faktörü", min_value=1.0, max_value=1.5, value=1.15, step=0.01)
 
         st.subheader("2. Donanım ve Mimari")
         col3, col4 = st.columns(2)
         with col3:
-            inverter_verimi = st.slider("UPS İnverter Verimi (%)", min_value=85.0, max_value=97.0, value=93.5)
+            inverter_verimi = st.slider("UPS İnverter Verimi (%)", min_value=85.0, max_value=97.0, value=92.0)
             dc_voltaj = st.number_input("Sistem DC Baraj Nominal Gerilimi (V)", min_value=12, max_value=800, value=384, step=12)
         with col4:
-            # 24V akü seçeneği de eklendi [24, 12, 6, 2]
             aku_blok_v = st.selectbox("Akü Blok Gerilimi (V)", [24, 12, 6, 2], index=1)
-            secilen_blok_ah = st.selectbox("Seçilecek Standart Blok Akü Kapasitesi (Ah)", [24, 33, 40, 55, 65, 75, 90, 100, 120, 150, 160, 200], index=7)
+            secilen_blok_ah = st.selectbox("Seçilecek Standart Blok Akü Kapasitesi (Ah)", [24, 33, 40, 55, 65, 75, 90, 100, 120, 150, 160, 200], index=5)
 
         calistir = st.form_submit_button("Hassas Hesapla ve Rapor Hazırla")
 
